@@ -29,11 +29,31 @@ Reusable Home Assistant blueprints for Lutron Pico remotes.
 - This is a first working draft intended for iterative testing.
 - Double-press actions are planned next after validating hold/release behavior across real hardware.
 
+## Typical Caseta 5-button Pico numbering (Lutron / HA)
+
+Numbers are **fixed by the remote model + integration** — you usually map once per room.
+
+| Button (physical) | Often reported as |
+|-------------------|-------------------|
+| Middle / favorite | 1 |
+| On                | 2 |
+| Raise             | 3 |
+| Off               | 4 |
+| Lower             | 5 |
+
+Always confirm with **Developer Tools → Events** (`lutron_caseta_button_event`) or blueprint **Debug — notify every Pico event**.
+
+## Persisting button numbers (optional helpers)
+
+Automation instances **already save** their inputs in Home Assistant; you should not need to re-type digits unless you **delete and recreate** the automation or use **Take control** and wipe fields.
+
+To reuse the **same** digits across **multiple** automations (or change them in one place), create five **Helpers → Number** (min **1**, max **10**, step **1**), set each to the Caseta digit, then in every Pico automation select them under **Optional — helper …** for On / Off / Raise / Lower / Middle.
+
 ## Troubleshooting
 
 - **Down does nothing but up works:** Re-import the latest blueprint. Older drafts compared button numbers loosely (`"5" == 5` can fail in templates). v0.1 on GitHub now compares with `(btn | int) == (button_down | int)`.
 - **See exactly what the remote sends:** In the automation/blueprint, enable **Debug — notify every Pico event**, then press each button. Use the `button=` value in the notification for your mapping. Turn debug off after.
 - **Developer Tools:** Listen to event `lutron_caseta_button_event` and compare `press` vs `release` for the lower paddle.
 - **Lights keep dimming after you let go / ON flashes then dims again:** v0.1.2 uses **restart** mode so a new button press cancels an in-progress UP/DOWN repeat loop. Re-import the blueprint and recreate or re-save the automation. Earlier **parallel** mode could leave an old “hold dim” loop running while a new press started another run.
-- **Middle “does nothing”:** From v0.1.3, **Middle behavior** defaults to **Favorite scene**. Create a Scene helper, select it as **Favorite scene entity**, and under **Favorite snapshot — light entities** pick the individual `light.*` entities to store (same lights as your Pico “Lights target” when possible — areas/groups cannot be snapshotted by `scene.create`). Short press runs `scene.turn_on`; long press runs `scene.create`. For fully custom behavior, set **Middle behavior** to **Custom** and use the short/long action fields. Turn on **Debug — notify when middle short or long runs** to confirm which path fired.
+- **Middle “does nothing”:** From v0.1.3+, **Middle behavior** defaults to **Favorite scene**. You must pick a **Favorite scene entity** (Scene helper) and at least one **`light.*`** under **Favorite snapshot — light entities** (areas/groups cannot be snapshotted). From v0.1.4, if something is missing, turn on **Notify if middle action is skipped** (default on) and you’ll get a persistent notification explaining which part is incomplete. Also enable **Debug — notify when middle short or long runs** to confirm short vs long timing. For custom behavior, set **Middle behavior** to **Custom**.
 - **ON at 100%:** v0.1.2 turns lights on with `brightness_pct: 100` for the ON button path.

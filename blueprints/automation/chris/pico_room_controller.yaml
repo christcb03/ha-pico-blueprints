@@ -1,10 +1,11 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.3)
+  name: Pico Room Controller (Draft v0.1.4)
   description: >
     Lutron Pico room controller with multi-remote support. Uses restart mode so a new
     button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
     100% brightness. Middle default: short press recalls a Scene, long press snapshots
     selected lights into that scene (override with Custom middle actions).
+    Optional Input number helpers store button digits so you set them once and reuse.
   domain: automation
   input:
     pico_devices:
@@ -23,7 +24,8 @@ blueprint:
             domain: light
 
     button_on:
-      name: ON button number
+      name: "On — Caseta button number (see Lutron list in README)"
+      description: Used if no helper is set below. Typical 5-button Pico On = 2.
       default: 2
       selector:
         number:
@@ -33,7 +35,8 @@ blueprint:
           mode: box
 
     button_off:
-      name: OFF button number
+      name: "Off — Caseta button number"
+      description: Typical 5-button Pico Off = 4.
       default: 4
       selector:
         number:
@@ -43,7 +46,8 @@ blueprint:
           mode: box
 
     button_up:
-      name: UP button number
+      name: "Raise / up paddle — button number"
+      description: Typical 5-button Pico = 3.
       default: 3
       selector:
         number:
@@ -53,7 +57,8 @@ blueprint:
           mode: box
 
     button_down:
-      name: DOWN button number
+      name: "Lower / down paddle — button number"
+      description: Typical 5-button Pico = 5.
       default: 5
       selector:
         number:
@@ -63,7 +68,8 @@ blueprint:
           mode: box
 
     button_middle:
-      name: MIDDLE button number
+      name: "Middle / favorite — button number"
+      description: Typical 5-button Pico center = 1 (your bridge may differ — use Debug).
       default: 1
       selector:
         number:
@@ -71,6 +77,40 @@ blueprint:
           max: 10
           step: 1
           mode: box
+
+    helper_button_on:
+      name: "Optional — Input number helper for On digit"
+      description: >
+        Helpers → Create helper → Number (min 1, max 10, step 1). Set its value to your
+        Caseta On button number. When set, it overrides “On — Caseta button number” above
+        so you can reuse one helper across automations.
+      selector:
+        entity:
+          domain: input_number
+
+    helper_button_off:
+      name: "Optional — helper for Off digit"
+      selector:
+        entity:
+          domain: input_number
+
+    helper_button_up:
+      name: "Optional — helper for Raise digit"
+      selector:
+        entity:
+          domain: input_number
+
+    helper_button_down:
+      name: "Optional — helper for Lower digit"
+      selector:
+        entity:
+          domain: input_number
+
+    helper_button_middle:
+      name: "Optional — helper for Middle digit"
+      selector:
+        entity:
+          domain: input_number
 
     step_percent:
       name: Dim step percent
@@ -181,9 +221,18 @@ blueprint:
     debug_notify_middle:
       name: Debug — notify when middle short or long runs
       description: >
-        Persistent notification when middle short-hold or long-hold path runs.
-        Use to verify timing; configure real actions in the middle action fields above.
+        Persistent notification when middle short-hold or long-hold path actually runs
+        scene/actions. Use together with Debug every Pico event when troubleshooting.
       default: false
+      selector:
+        boolean: {}
+
+    middle_warn_misconfig:
+      name: Notify if middle action is skipped (setup incomplete)
+      description: >
+        When Favorite scene mode is on but Favorite scene or snapshot lights are missing,
+        or Custom mode but actions are empty, send a persistent notification explaining why.
+      default: true
       selector:
         boolean: {}
 
@@ -198,18 +247,30 @@ trigger:
 variables:
   pico_devices_v: !input pico_devices
   target_lights_v: !input light_target
-  btn_on_v: !input button_on
-  btn_off_v: !input button_off
-  btn_up_v: !input button_up
-  btn_down_v: !input button_down
-  btn_middle_v: !input button_middle
+  _btn_on: !input button_on
+  _btn_off: !input button_off
+  _btn_up: !input button_up
+  _btn_down: !input button_down
+  _btn_middle: !input button_middle
+  _h_on: !input helper_button_on
+  _h_off: !input helper_button_off
+  _h_up: !input helper_button_up
+  _h_down: !input helper_button_down
+  _h_middle: !input helper_button_middle
+  btn_on_v: "{{ states(_h_on) | int(_btn_on) if _h_on else _btn_on }}"
+  btn_off_v: "{{ states(_h_off) | int(_btn_off) if _h_off else _btn_off }}"
+  btn_up_v: "{{ states(_h_up) | int(_btn_up) if _h_up else _btn_up }}"
+  btn_down_v: "{{ states(_h_down) | int(_btn_down) if _h_down else _btn_down }}"
+  btn_middle_v: "{{ states(_h_middle) | int(_btn_middle) if _h_middle else _btn_middle }}"
   step_pct_v: !input step_percent
   hold_start_v: !input hold_start_seconds
   repeat_interval_v: !input repeat_interval_seconds
   middle_long_v: !input middle_long_hold_seconds
   debug_notify_v: !input debug_notify
   debug_notify_middle_v: !input debug_notify_middle
+  middle_warn_misconfig_v: !input middle_warn_misconfig
   middle_behavior_v: !input middle_behavior
+  middle_mode_v: "{{ (middle_behavior_v | default('favorite_scene') | lower | trim) }}"
   favorite_scene_v: !input favorite_scene
   favorite_snapshot_v: !input favorite_snapshot_entities
   favorite_scene_id_v: "{% if favorite_scene_v %}{{ favorite_scene_v[6:] if favorite_scene_v.startswith('scene.') else favorite_scene_v }}{% endif %}"
@@ -384,23 +445,36 @@ action:
                         data:
                           title: Pico middle — short hold
                           message: >-
-                            Mode={{ middle_behavior_v }} (button {{ btn | int }}, device {{ dev }}).
+                            Mode={{ middle_mode_v }} (button {{ btn | int }}, device {{ dev }}).
                   - choose:
                       - conditions:
                           - condition: template
                             value_template: >-
-                              {{ middle_behavior_v == 'favorite_scene' and
-                                 (favorite_scene_v | default('', true) | length) > 0 }}
+                              {{ middle_mode_v == 'favorite_scene' and
+                                 (favorite_scene_v | default('', true) | string | length) > 0 }}
                         sequence:
                           - service: scene.turn_on
                             target:
-                              entity_id: "{{ favorite_scene_v }}"
+                              entity_id:
+                                - "{{ favorite_scene_v }}"
                       - conditions:
                           - condition: template
-                            value_template: "{{ middle_behavior_v == 'custom' }}"
+                            value_template: "{{ middle_mode_v == 'custom' }}"
                         sequence: !input action_middle_short
-            default:
-              - sequence:
+                      default:
+                        - if:
+                            - condition: template
+                              value_template: "{{ middle_warn_misconfig_v }}"
+                          then:
+                            - service: persistent_notification.create
+                              data:
+                                title: Pico middle (short) — nothing ran
+                                message: >-
+                                  Middle short path had no action. Favorite mode needs a
+                                  Favorite scene entity. Custom mode needs Middle short-hold actions.
+                                  Mode={{ middle_mode_v }}, scene_set={{ (favorite_scene_v | default('', true) | string | length) > 0 }}.
+              default:
+                - sequence:
                   - if:
                       - condition: template
                         value_template: "{{ debug_notify_middle_v }}"
@@ -409,13 +483,13 @@ action:
                         data:
                           title: Pico middle — long hold
                           message: >-
-                            Mode={{ middle_behavior_v }} (button {{ btn | int }}, device {{ dev }}).
+                            Mode={{ middle_mode_v }} (button {{ btn | int }}, device {{ dev }}).
                   - choose:
                       - conditions:
                           - condition: template
                             value_template: >-
-                              {{ middle_behavior_v == 'favorite_scene' and
-                                 (favorite_scene_v | default('', true) | length) > 0 and
+                              {{ middle_mode_v == 'favorite_scene' and
+                                 (favorite_scene_v | default('', true) | string | length) > 0 and
                                  (favorite_snapshot_v | default([]) | length) > 0 }}
                         sequence:
                           - service: scene.create
@@ -424,5 +498,19 @@ action:
                               snapshot_entities: !input favorite_snapshot_entities
                       - conditions:
                           - condition: template
-                            value_template: "{{ middle_behavior_v == 'custom' }}"
+                            value_template: "{{ middle_mode_v == 'custom' }}"
                         sequence: !input action_middle_long
+                      default:
+                        - if:
+                            - condition: template
+                              value_template: "{{ middle_warn_misconfig_v }}"
+                          then:
+                            - service: persistent_notification.create
+                              data:
+                                title: Pico middle (long) — nothing ran
+                                message: >-
+                                  Middle long path had no action. Favorite mode needs a Favorite
+                                  scene AND at least one light under Favorite snapshot. Custom mode
+                                  needs Middle long-hold actions.
+                                  Mode={{ middle_mode_v }}, scene={{ (favorite_scene_v | default('', true) | string | length) > 0 }},
+                                  snapshots={{ favorite_snapshot_v | default([]) | length }}.
