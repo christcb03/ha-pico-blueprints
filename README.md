@@ -13,6 +13,12 @@ Reusable Home Assistant blueprints for Lutron Pico remotes.
 
 ## Install In Home Assistant
 
+### One-click import (recommended)
+
+[![Open your Home Assistant instance and import this blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/christcb03/ha-pico-blueprints/main/blueprints/automation/chris/pico_room_controller.yaml)
+
+### Manual install
+
 1. Copy the blueprint YAML into:
    - `config/blueprints/automation/chris/pico_room_controller.yaml`
 2. In HA, go to `Settings -> Automations & Scenes -> Blueprints`.
