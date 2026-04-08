@@ -28,3 +28,9 @@ Reusable Home Assistant blueprints for Lutron Pico remotes.
 
 - This is a first working draft intended for iterative testing.
 - Double-press actions are planned next after validating hold/release behavior across real hardware.
+
+## Troubleshooting
+
+- **Down does nothing but up works:** Re-import the latest blueprint. Older drafts compared button numbers loosely (`"5" == 5` can fail in templates). v0.1 on GitHub now compares with `(btn | int) == (button_down | int)`.
+- **See exactly what the remote sends:** In the automation/blueprint, enable **Debug — notify every Pico event**, then press each button. Use the `button=` value in the notification for your mapping. Turn debug off after.
+- **Developer Tools:** Listen to event `lutron_caseta_button_event` and compare `press` vs `release` for the lower paddle.

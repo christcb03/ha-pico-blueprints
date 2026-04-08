@@ -1,5 +1,5 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1)
+  name: Pico Room Controller (Draft v0.1.1)
   description: >
     Lutron Pico room controller with multi-remote support. Handles immediate on/off,
     up/down step on press, repeating dim while held, and middle short/long hold actions.
@@ -130,6 +130,15 @@ blueprint:
       selector:
         action: {}
 
+    debug_notify:
+      name: Debug — notify every Pico event (press only)
+      description: >
+        Sends a persistent notification with device_id, button_number, and action.
+        Turn off after mapping buttons. Helps when hold/release logic is unclear.
+      default: false
+      selector:
+        boolean: {}
+
 mode: parallel
 max: 30
 
@@ -149,6 +158,7 @@ variables:
   hold_start_v: !input hold_start_seconds
   repeat_interval_v: !input repeat_interval_seconds
   middle_long_v: !input middle_long_hold_seconds
+  debug_notify_v: !input debug_notify
   dev: "{{ trigger.event.data.device_id }}"
   btn: "{{ trigger.event.data.button_number | int(0) }}"
   act: "{{ trigger.event.data.action | lower }}"
@@ -160,18 +170,37 @@ condition:
     value_template: "{{ act == 'press' }}"
 
 action:
+  - if:
+      - condition: template
+        value_template: "{{ debug_notify_v }}"
+    then:
+      - service: persistent_notification.create
+        data:
+          title: Pico debug (press)
+          message: >
+            device_id={{ dev }},
+            button={{ btn | int }},
+            action={{ act }},
+            raw={{ trigger.event.data | to_json }}
+
   - choose:
-      - conditions: "{{ btn == btn_on_v }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (btn | int) == (btn_on_v | int) }}"
         sequence:
           - service: light.turn_on
             target: !input light_target
 
-      - conditions: "{{ btn == btn_off_v }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (btn | int) == (btn_off_v | int) }}"
         sequence:
           - service: light.turn_off
             target: !input light_target
 
-      - conditions: "{{ btn == btn_up_v }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (btn | int) == (btn_up_v | int) }}"
         sequence:
           - service: light.turn_on
             target: !input light_target
@@ -191,7 +220,7 @@ action:
                     value_template: >
                       {{ wait.trigger is none or
                          wait.trigger.event.data.device_id != dev or
-                         (wait.trigger.event.data.button_number | int(0)) != btn or
+                         (wait.trigger.event.data.button_number | int(0)) != (btn | int) or
                          (wait.trigger.event.data.action | lower) != 'release' }}
                 sequence:
                   - repeat:
@@ -211,15 +240,17 @@ action:
                           value_template: >
                             {{ wait.trigger is not none and
                                wait.trigger.event.data.device_id == dev and
-                               (wait.trigger.event.data.button_number | int(0)) == btn and
+                               (wait.trigger.event.data.button_number | int(0)) == (btn | int) and
                                (wait.trigger.event.data.action | lower) == 'release' }}
 
-      - conditions: "{{ btn == btn_down_v }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (btn | int) == (btn_down_v | int) }}"
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_step_pct: "{{ 0 - (step_pct_v | int) }}"
+              brightness_step_pct: "{{ (step_pct_v | int) * -1 }}"
 
           - wait_for_trigger:
               - platform: event
@@ -234,7 +265,7 @@ action:
                     value_template: >
                       {{ wait.trigger is none or
                          wait.trigger.event.data.device_id != dev or
-                         (wait.trigger.event.data.button_number | int(0)) != btn or
+                         (wait.trigger.event.data.button_number | int(0)) != (btn | int) or
                          (wait.trigger.event.data.action | lower) != 'release' }}
                 sequence:
                   - repeat:
@@ -242,7 +273,7 @@ action:
                         - service: light.turn_on
                           target: !input light_target
                           data:
-                            brightness_step_pct: "{{ 0 - (step_pct_v | int) }}"
+                            brightness_step_pct: "{{ (step_pct_v | int) * -1 }}"
                         - wait_for_trigger:
                             - platform: event
                               event_type: lutron_caseta_button_event
@@ -254,10 +285,12 @@ action:
                           value_template: >
                             {{ wait.trigger is not none and
                                wait.trigger.event.data.device_id == dev and
-                               (wait.trigger.event.data.button_number | int(0)) == btn and
+                               (wait.trigger.event.data.button_number | int(0)) == (btn | int) and
                                (wait.trigger.event.data.action | lower) == 'release' }}
 
-      - conditions: "{{ btn == btn_middle_v }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (btn | int) == (btn_middle_v | int) }}"
         sequence:
           - sequence: !input action_middle_immediate
 
@@ -274,7 +307,7 @@ action:
                     value_template: >
                       {{ wait.trigger is not none and
                          wait.trigger.event.data.device_id == dev and
-                         (wait.trigger.event.data.button_number | int(0)) == btn and
+                         (wait.trigger.event.data.button_number | int(0)) == (btn | int) and
                          (wait.trigger.event.data.action | lower) == 'release' }}
                 sequence: !input action_middle_short
             default:
