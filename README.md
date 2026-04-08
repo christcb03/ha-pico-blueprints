@@ -34,3 +34,6 @@ Reusable Home Assistant blueprints for Lutron Pico remotes.
 - **Down does nothing but up works:** Re-import the latest blueprint. Older drafts compared button numbers loosely (`"5" == 5` can fail in templates). v0.1 on GitHub now compares with `(btn | int) == (button_down | int)`.
 - **See exactly what the remote sends:** In the automation/blueprint, enable **Debug — notify every Pico event**, then press each button. Use the `button=` value in the notification for your mapping. Turn debug off after.
 - **Developer Tools:** Listen to event `lutron_caseta_button_event` and compare `press` vs `release` for the lower paddle.
+- **Lights keep dimming after you let go / ON flashes then dims again:** v0.1.2 uses **restart** mode so a new button press cancels an in-progress UP/DOWN repeat loop. Re-import the blueprint and recreate or re-save the automation. Earlier **parallel** mode could leave an old “hold dim” loop running while a new press started another run.
+- **Middle “does nothing”:** The middle **short** and **long** action fields default to **empty**. You must add actions (e.g. `scene.turn_on` for a favorite, `scene.create` or `scene.snapshot` to save). Turn on **Debug — notify when middle short or long runs** to confirm which path fired.
+- **ON at 100%:** v0.1.2 turns lights on with `brightness_pct: 100` for the ON button path.

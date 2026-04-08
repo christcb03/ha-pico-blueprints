@@ -1,8 +1,9 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.1)
+  name: Pico Room Controller (Draft v0.1.2)
   description: >
-    Lutron Pico room controller with multi-remote support. Handles immediate on/off,
-    up/down step on press, repeating dim while held, and middle short/long hold actions.
+    Lutron Pico room controller with multi-remote support. Uses restart mode so a new
+    button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
+    100% brightness. Middle actions are user-defined (defaults are empty).
   domain: automation
   input:
     pico_devices:
@@ -118,14 +119,18 @@ blueprint:
 
     action_middle_short:
       name: Middle short-hold action
-      description: Triggered when middle is released before long-hold threshold.
+      description: >
+        When you release the middle button before the long-hold time (e.g. recall a scene).
+        Default is empty — configure this or enable debug below to confirm the path runs.
       default: []
       selector:
         action: {}
 
     action_middle_long:
       name: Middle long-hold action
-      description: Triggered when middle is held for long-hold threshold.
+      description: >
+        When you keep middle held past the long-hold time (e.g. create/save a scene).
+        Default is empty — configure this or enable debug below.
       default: []
       selector:
         action: {}
@@ -139,8 +144,18 @@ blueprint:
       selector:
         boolean: {}
 
-mode: parallel
-max: 30
+    debug_notify_middle:
+      name: Debug — notify when middle short or long runs
+      description: >
+        Persistent notification when middle short-hold or long-hold path runs.
+        Use to verify timing; configure real actions in the middle action fields above.
+      default: false
+      selector:
+        boolean: {}
+
+# Restart: a new Pico *press* cancels any in-progress UP/DOWN repeat loops on this
+# automation. Prevents “stuck dimming” when parallel runs fought each other.
+mode: restart
 
 trigger:
   - platform: event
@@ -159,6 +174,7 @@ variables:
   repeat_interval_v: !input repeat_interval_seconds
   middle_long_v: !input middle_long_hold_seconds
   debug_notify_v: !input debug_notify
+  debug_notify_middle_v: !input debug_notify_middle
   dev: "{{ trigger.event.data.device_id }}"
   btn: "{{ trigger.event.data.button_number | int(0) }}"
   act: "{{ trigger.event.data.action | lower }}"
@@ -190,6 +206,8 @@ action:
         sequence:
           - service: light.turn_on
             target: !input light_target
+            data:
+              brightness_pct: 100
 
       - conditions:
           - condition: template
@@ -210,6 +228,8 @@ action:
           - wait_for_trigger:
               - platform: event
                 event_type: lutron_caseta_button_event
+                event_data:
+                  device_id: "{{ dev }}"
             timeout:
               seconds: "{{ hold_start_v | float }}"
             continue_on_timeout: true
@@ -232,6 +252,8 @@ action:
                         - wait_for_trigger:
                             - platform: event
                               event_type: lutron_caseta_button_event
+                              event_data:
+                                device_id: "{{ dev }}"
                           timeout:
                             seconds: "{{ repeat_interval_v | float }}"
                           continue_on_timeout: true
@@ -255,6 +277,8 @@ action:
           - wait_for_trigger:
               - platform: event
                 event_type: lutron_caseta_button_event
+                event_data:
+                  device_id: "{{ dev }}"
             timeout:
               seconds: "{{ hold_start_v | float }}"
             continue_on_timeout: true
@@ -277,6 +301,8 @@ action:
                         - wait_for_trigger:
                             - platform: event
                               event_type: lutron_caseta_button_event
+                              event_data:
+                                device_id: "{{ dev }}"
                           timeout:
                             seconds: "{{ repeat_interval_v | float }}"
                           continue_on_timeout: true
@@ -297,6 +323,8 @@ action:
           - wait_for_trigger:
               - platform: event
                 event_type: lutron_caseta_button_event
+                event_data:
+                  device_id: "{{ dev }}"
             timeout:
               seconds: "{{ middle_long_v | float }}"
             continue_on_timeout: true
@@ -309,6 +337,24 @@ action:
                          wait.trigger.event.data.device_id == dev and
                          (wait.trigger.event.data.button_number | int(0)) == (btn | int) and
                          (wait.trigger.event.data.action | lower) == 'release' }}
-                sequence: !input action_middle_short
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ debug_notify_middle_v }}"
+                    then:
+                      - service: persistent_notification.create
+                        data:
+                          title: Pico middle — short hold
+                          message: Recall / short action running (button {{ btn | int }}, device {{ dev }}).
+                  - sequence: !input action_middle_short
             default:
-              - sequence: !input action_middle_long
+              - sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ debug_notify_middle_v }}"
+                    then:
+                      - service: persistent_notification.create
+                        data:
+                          title: Pico middle — long hold
+                          message: Save / long action running (button {{ btn | int }}, device {{ dev }}).
+                  - sequence: !input action_middle_long
