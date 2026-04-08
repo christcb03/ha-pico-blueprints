@@ -1,9 +1,10 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.2)
+  name: Pico Room Controller (Draft v0.1.3)
   description: >
     Lutron Pico room controller with multi-remote support. Uses restart mode so a new
     button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
-    100% brightness. Middle actions are user-defined (defaults are empty).
+    100% brightness. Middle default: short press recalls a Scene, long press snapshots
+    selected lights into that scene (override with Custom middle actions).
   domain: automation
   input:
     pico_devices:
@@ -111,26 +112,59 @@ blueprint:
           step: 0.5
           mode: box
 
+    middle_behavior:
+      name: Middle button behavior
+      description: >
+        Favorite scene: short press turns ON the scene you pick; long press saves a
+        snapshot of the selected lights into that scene. Custom: use the action fields below.
+      default: favorite_scene
+      selector:
+        select:
+          options:
+            - label: Favorite scene (short = recall, long = save snapshot)
+              value: favorite_scene
+            - label: Custom actions (short/long fields below)
+              value: custom
+
+    favorite_scene:
+      name: Favorite scene entity
+      description: >
+        Create a Scene in Settings → Helpers (or use an existing scene entity). Its states
+        are overwritten on long press by scene.create snapshot. Short press runs scene.turn_on.
+      selector:
+        entity:
+          domain: scene
+
+    favorite_snapshot_entities:
+      name: Favorite snapshot — light entities
+      description: >
+        Lights captured on middle long press. Home Assistant needs explicit light entity IDs
+        here (cannot snapshot an area/group target). Pick the same lights as “Lights target” when possible.
+      default: []
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
     action_middle_immediate:
       name: Middle immediate action (optional)
+      description: Runs on middle press for both Favorite and Custom modes.
       default: []
       selector:
         action: {}
 
     action_middle_short:
-      name: Middle short-hold action
+      name: Middle short-hold — custom actions only
       description: >
-        When you release the middle button before the long-hold time (e.g. recall a scene).
-        Default is empty — configure this or enable debug below to confirm the path runs.
+        Only used when Middle behavior = Custom. Favorite scene mode uses scene.turn_on instead.
       default: []
       selector:
         action: {}
 
     action_middle_long:
-      name: Middle long-hold action
+      name: Middle long-hold — custom actions only
       description: >
-        When you keep middle held past the long-hold time (e.g. create/save a scene).
-        Default is empty — configure this or enable debug below.
+        Only used when Middle behavior = Custom. Favorite scene mode uses scene.create instead.
       default: []
       selector:
         action: {}
@@ -175,6 +209,10 @@ variables:
   middle_long_v: !input middle_long_hold_seconds
   debug_notify_v: !input debug_notify
   debug_notify_middle_v: !input debug_notify_middle
+  middle_behavior_v: !input middle_behavior
+  favorite_scene_v: !input favorite_scene
+  favorite_snapshot_v: !input favorite_snapshot_entities
+  favorite_scene_id_v: "{% if favorite_scene_v %}{{ favorite_scene_v[6:] if favorite_scene_v.startswith('scene.') else favorite_scene_v }}{% endif %}"
   dev: "{{ trigger.event.data.device_id }}"
   btn: "{{ trigger.event.data.button_number | int(0) }}"
   act: "{{ trigger.event.data.action | lower }}"
@@ -345,8 +383,22 @@ action:
                       - service: persistent_notification.create
                         data:
                           title: Pico middle — short hold
-                          message: Recall / short action running (button {{ btn | int }}, device {{ dev }}).
-                  - sequence: !input action_middle_short
+                          message: >-
+                            Mode={{ middle_behavior_v }} (button {{ btn | int }}, device {{ dev }}).
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ middle_behavior_v == 'favorite_scene' and
+                                 (favorite_scene_v | default('', true) | length) > 0 }}
+                        sequence:
+                          - service: scene.turn_on
+                            target:
+                              entity_id: "{{ favorite_scene_v }}"
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ middle_behavior_v == 'custom' }}"
+                        sequence: !input action_middle_short
             default:
               - sequence:
                   - if:
@@ -356,5 +408,21 @@ action:
                       - service: persistent_notification.create
                         data:
                           title: Pico middle — long hold
-                          message: Save / long action running (button {{ btn | int }}, device {{ dev }}).
-                  - sequence: !input action_middle_long
+                          message: >-
+                            Mode={{ middle_behavior_v }} (button {{ btn | int }}, device {{ dev }}).
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ middle_behavior_v == 'favorite_scene' and
+                                 (favorite_scene_v | default('', true) | length) > 0 and
+                                 (favorite_snapshot_v | default([]) | length) > 0 }}
+                        sequence:
+                          - service: scene.create
+                            data:
+                              scene_id: "{{ favorite_scene_id_v }}"
+                              snapshot_entities: !input favorite_snapshot_entities
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ middle_behavior_v == 'custom' }}"
+                        sequence: !input action_middle_long
