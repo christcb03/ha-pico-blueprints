@@ -1,0 +1,281 @@
+blueprint:
+  name: Pico Room Controller (Draft v0.1)
+  description: >
+    Lutron Pico room controller with multi-remote support. Handles immediate on/off,
+    up/down step on press, repeating dim while held, and middle short/long hold actions.
+  domain: automation
+  input:
+    pico_devices:
+      name: Pico remotes
+      description: One or more Pico devices that should control this same target.
+      selector:
+        device:
+          multiple: true
+
+    light_target:
+      name: Lights target
+      description: Select lights by entity/device/area/group target.
+      selector:
+        target:
+          entity:
+            domain: light
+
+    button_on:
+      name: ON button number
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+
+    button_off:
+      name: OFF button number
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+
+    button_up:
+      name: UP button number
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+
+    button_down:
+      name: DOWN button number
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+
+    button_middle:
+      name: MIDDLE button number
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+
+    step_percent:
+      name: Dim step percent
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          mode: slider
+
+    hold_start_seconds:
+      name: Hold threshold (seconds)
+      default: 0.5
+      selector:
+        number:
+          min: 0.1
+          max: 2.0
+          step: 0.1
+          mode: box
+
+    repeat_interval_seconds:
+      name: Hold repeat interval (seconds)
+      default: 0.1
+      selector:
+        number:
+          min: 0.05
+          max: 1.0
+          step: 0.05
+          mode: box
+
+    middle_long_hold_seconds:
+      name: Middle long-hold threshold (seconds)
+      default: 3.0
+      selector:
+        number:
+          min: 1.0
+          max: 10.0
+          step: 0.5
+          mode: box
+
+    action_middle_immediate:
+      name: Middle immediate action (optional)
+      default: []
+      selector:
+        action: {}
+
+    action_middle_short:
+      name: Middle short-hold action
+      description: Triggered when middle is released before long-hold threshold.
+      default: []
+      selector:
+        action: {}
+
+    action_middle_long:
+      name: Middle long-hold action
+      description: Triggered when middle is held for long-hold threshold.
+      default: []
+      selector:
+        action: {}
+
+mode: parallel
+max: 30
+
+trigger:
+  - platform: event
+    event_type: lutron_caseta_button_event
+
+variables:
+  pico_devices_v: !input pico_devices
+  target_lights_v: !input light_target
+  btn_on_v: !input button_on
+  btn_off_v: !input button_off
+  btn_up_v: !input button_up
+  btn_down_v: !input button_down
+  btn_middle_v: !input button_middle
+  step_pct_v: !input step_percent
+  hold_start_v: !input hold_start_seconds
+  repeat_interval_v: !input repeat_interval_seconds
+  middle_long_v: !input middle_long_hold_seconds
+  dev: "{{ trigger.event.data.device_id }}"
+  btn: "{{ trigger.event.data.button_number | int(0) }}"
+  act: "{{ trigger.event.data.action | lower }}"
+
+condition:
+  - condition: template
+    value_template: "{{ dev in pico_devices_v }}"
+  - condition: template
+    value_template: "{{ act == 'press' }}"
+
+action:
+  - choose:
+      - conditions: "{{ btn == btn_on_v }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+
+      - conditions: "{{ btn == btn_off_v }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+
+      - conditions: "{{ btn == btn_up_v }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step_pct: "{{ step_pct_v | int }}"
+
+          - wait_for_trigger:
+              - platform: event
+                event_type: lutron_caseta_button_event
+            timeout:
+              seconds: "{{ hold_start_v | float }}"
+            continue_on_timeout: true
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ wait.trigger is none or
+                         wait.trigger.event.data.device_id != dev or
+                         (wait.trigger.event.data.button_number | int(0)) != btn or
+                         (wait.trigger.event.data.action | lower) != 'release' }}
+                sequence:
+                  - repeat:
+                      sequence:
+                        - service: light.turn_on
+                          target: !input light_target
+                          data:
+                            brightness_step_pct: "{{ step_pct_v | int }}"
+                        - wait_for_trigger:
+                            - platform: event
+                              event_type: lutron_caseta_button_event
+                          timeout:
+                            seconds: "{{ repeat_interval_v | float }}"
+                          continue_on_timeout: true
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ wait.trigger is not none and
+                               wait.trigger.event.data.device_id == dev and
+                               (wait.trigger.event.data.button_number | int(0)) == btn and
+                               (wait.trigger.event.data.action | lower) == 'release' }}
+
+      - conditions: "{{ btn == btn_down_v }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_step_pct: "{{ 0 - (step_pct_v | int) }}"
+
+          - wait_for_trigger:
+              - platform: event
+                event_type: lutron_caseta_button_event
+            timeout:
+              seconds: "{{ hold_start_v | float }}"
+            continue_on_timeout: true
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ wait.trigger is none or
+                         wait.trigger.event.data.device_id != dev or
+                         (wait.trigger.event.data.button_number | int(0)) != btn or
+                         (wait.trigger.event.data.action | lower) != 'release' }}
+                sequence:
+                  - repeat:
+                      sequence:
+                        - service: light.turn_on
+                          target: !input light_target
+                          data:
+                            brightness_step_pct: "{{ 0 - (step_pct_v | int) }}"
+                        - wait_for_trigger:
+                            - platform: event
+                              event_type: lutron_caseta_button_event
+                          timeout:
+                            seconds: "{{ repeat_interval_v | float }}"
+                          continue_on_timeout: true
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ wait.trigger is not none and
+                               wait.trigger.event.data.device_id == dev and
+                               (wait.trigger.event.data.button_number | int(0)) == btn and
+                               (wait.trigger.event.data.action | lower) == 'release' }}
+
+      - conditions: "{{ btn == btn_middle_v }}"
+        sequence:
+          - sequence: !input action_middle_immediate
+
+          - wait_for_trigger:
+              - platform: event
+                event_type: lutron_caseta_button_event
+            timeout:
+              seconds: "{{ middle_long_v | float }}"
+            continue_on_timeout: true
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ wait.trigger is not none and
+                         wait.trigger.event.data.device_id == dev and
+                         (wait.trigger.event.data.button_number | int(0)) == btn and
+                         (wait.trigger.event.data.action | lower) == 'release' }}
+                sequence: !input action_middle_short
+            default:
+              - sequence: !input action_middle_long
