@@ -48,7 +48,7 @@ blueprint:
     button_up:
       name: "Raise / up paddle — button number"
       description: Typical 5-button Pico = 3.
-      default: 3
+      default: 5
       selector:
         number:
           min: 1
@@ -59,7 +59,7 @@ blueprint:
     button_down:
       name: "Lower / down paddle — button number"
       description: Typical 5-button Pico = 5.
-      default: 5
+      default: 6
       selector:
         number:
           min: 1
@@ -70,7 +70,7 @@ blueprint:
     button_middle:
       name: "Middle / favorite — button number"
       description: Typical 5-button Pico center = 1 (your bridge may differ — use Debug).
-      default: 1
+      default: 3
       selector:
         number:
           min: 1
