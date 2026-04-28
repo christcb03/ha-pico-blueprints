@@ -1,5 +1,5 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.7)
+  name: Pico Room Controller (Draft v1.0.0)
   description: >
     Lutron Pico room controller with multi-remote support. Uses restart mode so a new
     button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
