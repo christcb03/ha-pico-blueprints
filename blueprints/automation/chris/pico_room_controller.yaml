@@ -1,10 +1,11 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.5)
+  name: Pico Room Controller (Draft v0.1.6)
   description: >
     Lutron Pico room controller with multi-remote support. Uses restart mode so a new
     button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
     100% brightness. Middle default: short press recalls a favorite Scene; long press
-    saves a temporary snapshot for that same scene until Home Assistant restarts.
+    saves a temporary snapshot for that same scene until Home Assistant restarts, then
+    flashes the lights to confirm.
     Optional Input number helpers store button digits so you set them once and reuse.
   domain: automation
   input:
@@ -157,8 +158,8 @@ blueprint:
       description: >
         Favorite scene: short press turns ON the scene you pick; long press creates a
         temporary scene snapshot with that same scene ID. The long-press snapshot is used
-        for later short presses until Home Assistant restarts/reloads scenes. Custom: use
-        the action fields below.
+        for later short presses until Home Assistant restarts/reloads scenes, and the
+        lights flash after the snapshot is saved. Custom: use the action fields below.
       default: favorite_scene
       selector:
         select:
@@ -174,7 +175,7 @@ blueprint:
         Create a Scene in Settings → Helpers (or use an existing scene entity). Short press
         runs scene.turn_on. Long press creates a temporary scene.create snapshot using the
         same scene ID, so later short presses recall the snapshot until Home Assistant
-        restarts/reloads scenes.
+        restarts/reloads scenes, then flashes the lights to confirm.
       selector:
         entity:
           domain: scene
@@ -211,7 +212,7 @@ blueprint:
       name: Middle long-hold — custom actions only
       description: >
         Only used when Middle behavior = Custom. Favorite scene mode creates a temporary
-        scene.create snapshot instead.
+        scene.create snapshot and flashes the lights instead.
       default: []
       selector:
         action: {}
@@ -503,6 +504,10 @@ action:
                             data:
                               scene_id: "{{ favorite_scene_id_v }}"
                               snapshot_entities: !input favorite_snapshot_entities
+                          - service: light.turn_on
+                            target: !input light_target
+                            data:
+                              flash: short
                       - conditions:
                           - condition: template
                             value_template: "{{ middle_mode_v == 'custom' }}"
