@@ -479,60 +479,60 @@ action:
                           - condition: template
                             value_template: "{{ middle_mode_v == 'custom' }}"
                         sequence: !input action_middle_short
-                      default:
-                        - if:
-                            - condition: template
-                              value_template: "{{ middle_warn_misconfig_v }}"
-                          then:
-                            - service: persistent_notification.create
-                              data:
-                                title: Pico middle (short) — nothing ran
-                                message: >-
-                                  Middle short path had no action. Favorite mode needs a
-                                  Favorite scene entity. Custom mode needs Middle short-hold actions.
-                                  Mode={{ middle_mode_v }}, scene_set={{ (favorite_scene_v | default('', true) | string | length) > 0 }}.
-              default:
-                - sequence:
-                  - if:
-                      - condition: template
-                        value_template: "{{ debug_notify_middle_v }}"
-                    then:
-                      - service: persistent_notification.create
-                        data:
-                          title: Pico middle — long hold
-                          message: >-
-                            Mode={{ middle_mode_v }} (button {{ btn | int }}, device {{ dev }}).
-                  - choose:
-                      - conditions:
+                    default:
+                      - if:
                           - condition: template
-                            value_template: >-
-                              {{ middle_mode_v == 'favorite_scene' and
-                                 (favorite_scene_v | default('', true) | string | length) > 0 and
-                                 (favorite_snapshot_v | default([]) | length) > 0 }}
-                        sequence:
-                          - service: scene.create
+                            value_template: "{{ middle_warn_misconfig_v }}"
+                        then:
+                          - service: persistent_notification.create
                             data:
-                              scene_id: "{{ favorite_temp_scene_id_v }}"
-                              snapshot_entities: !input favorite_snapshot_entities
-                          - service: light.turn_on
-                            target: !input light_target
-                            data:
-                              flash: short
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ middle_mode_v == 'custom' }}"
-                        sequence: !input action_middle_long
-                      default:
-                        - if:
-                            - condition: template
-                              value_template: "{{ middle_warn_misconfig_v }}"
-                          then:
-                            - service: persistent_notification.create
-                              data:
-                                title: Pico middle (long) — nothing ran
-                                message: >-
-                                  Middle long path had no action. Favorite mode needs a Favorite
-                                  scene AND at least one light under Favorite snapshot. Custom mode
-                                  needs Middle long-hold actions.
-                                  Mode={{ middle_mode_v }}, scene={{ (favorite_scene_v | default('', true) | string | length) > 0 }},
-                                  snapshots={{ favorite_snapshot_v | default([]) | length }}.
+                              title: Pico middle (short) — nothing ran
+                              message: >-
+                                Middle short path had no action. Favorite mode needs a
+                                Favorite scene entity. Custom mode needs Middle short-hold actions.
+                                Mode={{ middle_mode_v }}, scene_set={{ (favorite_scene_v | default('', true) | string | length) > 0 }}.
+            default:
+              - sequence:
+                - if:
+                    - condition: template
+                      value_template: "{{ debug_notify_middle_v }}"
+                  then:
+                    - service: persistent_notification.create
+                      data:
+                        title: Pico middle — long hold
+                        message: >-
+                          Mode={{ middle_mode_v }} (button {{ btn | int }}, device {{ dev }}).
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ middle_mode_v == 'favorite_scene' and
+                               (favorite_scene_v | default('', true) | string | length) > 0 and
+                               (favorite_snapshot_v | default([]) | length) > 0 }}
+                      sequence:
+                        - service: scene.create
+                          data:
+                            scene_id: "{{ favorite_temp_scene_id_v }}"
+                            snapshot_entities: !input favorite_snapshot_entities
+                        - service: light.turn_on
+                          target: !input light_target
+                          data:
+                            flash: short
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ middle_mode_v == 'custom' }}"
+                      sequence: !input action_middle_long
+                  default:
+                    - if:
+                        - condition: template
+                          value_template: "{{ middle_warn_misconfig_v }}"
+                      then:
+                        - service: persistent_notification.create
+                          data:
+                            title: Pico middle (long) — nothing ran
+                            message: >-
+                              Middle long path had no action. Favorite mode needs a Favorite
+                              scene AND at least one light under Favorite snapshot. Custom mode
+                              needs Middle long-hold actions.
+                              Mode={{ middle_mode_v }}, scene={{ (favorite_scene_v | default('', true) | string | length) > 0 }},
+                              snapshots={{ favorite_snapshot_v | default([]) | length }}.
