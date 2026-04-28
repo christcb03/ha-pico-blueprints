@@ -293,7 +293,7 @@ variables:
   favorite_temp_scene_id_v: "{% if favorite_scene_id_v %}{{ favorite_scene_id_v }}_temp{% endif %}"
   favorite_temp_scene_v: "{% if favorite_temp_scene_id_v %}scene.{{ favorite_temp_scene_id_v }}{% endif %}"
   favorite_active_scene_v: >-
-    {% if favorite_temp_scene_v and states(favorite_temp_scene_v) not in ['unknown', 'unavailable'] %}
+    {% if favorite_temp_scene_v and (expand(favorite_temp_scene_v) | list | count > 0) %}
       {{ favorite_temp_scene_v }}
     {% else %}
       {{ favorite_scene_v }}
