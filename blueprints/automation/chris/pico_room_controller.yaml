@@ -1,10 +1,10 @@
 blueprint:
-  name: Pico Room Controller (Draft v0.1.4)
+  name: Pico Room Controller (Draft v0.1.5)
   description: >
     Lutron Pico room controller with multi-remote support. Uses restart mode so a new
     button press cancels in-progress hold-repeat (avoids runaway dimming). ON goes to
-    100% brightness. Middle default: short press recalls a Scene, long press snapshots
-    selected lights into that scene (override with Custom middle actions).
+    100% brightness. Middle default: short press recalls a favorite Scene; long press
+    saves a temporary snapshot for that same scene until Home Assistant restarts.
     Optional Input number helpers store button digits so you set them once and reuse.
   domain: automation
   input:
@@ -155,13 +155,15 @@ blueprint:
     middle_behavior:
       name: Middle button behavior
       description: >
-        Favorite scene: short press turns ON the scene you pick; long press saves a
-        snapshot of the selected lights into that scene. Custom: use the action fields below.
+        Favorite scene: short press turns ON the scene you pick; long press creates a
+        temporary scene snapshot with that same scene ID. The long-press snapshot is used
+        for later short presses until Home Assistant restarts/reloads scenes. Custom: use
+        the action fields below.
       default: favorite_scene
       selector:
         select:
           options:
-            - label: Favorite scene (short = recall, long = save snapshot)
+            - label: Favorite scene (short = recall, long = temporary snapshot)
               value: favorite_scene
             - label: Custom actions (short/long fields below)
               value: custom
@@ -169,17 +171,20 @@ blueprint:
     favorite_scene:
       name: Favorite scene entity
       description: >
-        Create a Scene in Settings → Helpers (or use an existing scene entity). Its states
-        are overwritten on long press by scene.create snapshot. Short press runs scene.turn_on.
+        Create a Scene in Settings → Helpers (or use an existing scene entity). Short press
+        runs scene.turn_on. Long press creates a temporary scene.create snapshot using the
+        same scene ID, so later short presses recall the snapshot until Home Assistant
+        restarts/reloads scenes.
       selector:
         entity:
           domain: scene
 
     favorite_snapshot_entities:
-      name: Favorite snapshot — light entities
+      name: Favorite temporary snapshot — light entities
       description: >
-        Lights captured on middle long press. Home Assistant needs explicit light entity IDs
-        here (cannot snapshot an area/group target). Pick the same lights as “Lights target” when possible.
+        Lights captured into the temporary favorite on middle long press. Home Assistant
+        needs explicit light entity IDs here (cannot snapshot an area/group target). Pick
+        the same lights as “Lights target” when possible.
       default: []
       selector:
         entity:
@@ -196,7 +201,8 @@ blueprint:
     action_middle_short:
       name: Middle short-hold — custom actions only
       description: >
-        Only used when Middle behavior = Custom. Favorite scene mode uses scene.turn_on instead.
+        Only used when Middle behavior = Custom. Favorite scene mode recalls the selected
+        scene, or the temporary snapshot if one was saved since the last restart.
       default: []
       selector:
         action: {}
@@ -204,7 +210,8 @@ blueprint:
     action_middle_long:
       name: Middle long-hold — custom actions only
       description: >
-        Only used when Middle behavior = Custom. Favorite scene mode uses scene.create instead.
+        Only used when Middle behavior = Custom. Favorite scene mode creates a temporary
+        scene.create snapshot instead.
       default: []
       selector:
         action: {}
