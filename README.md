@@ -24,10 +24,16 @@ Reusable Home Assistant blueprints for Lutron Pico remotes.
 2. In HA, go to `Settings -> Automations & Scenes -> Blueprints`.
 3. Import/create an automation from this blueprint.
 
+Note: the one-click import saves the file as `config/blueprints/automation/christcb03/pico_room_controller.yaml` (Home Assistant names the folder after the GitHub user), not under `chris/`.
+
 ## Notes
 
-- This is a first working draft intended for iterative testing.
+- Current version: v1.0.0 (commit `34237db`, 2026-04-28).
 - Double-press actions are planned next after validating hold/release behavior across real hardware.
+
+## Known issue (review of 2026-10-04)
+
+The UP/DOWN hold-repeat loops have no iteration cap. They stop only when a `release` arrives while the loop is waiting for it. A release that arrives while a `light.turn_on` call is running is missed, and dimming continues until the next press (restart mode then cancels the run). Found by reading the blueprint; not reproduced.
 
 ## Typical Caseta 5-button Pico numbering (Lutron / HA)
 
@@ -35,11 +41,11 @@ Numbers are **fixed by the remote model + integration** — you usually map once
 
 | Button (physical) | Often reported as |
 |-------------------|-------------------|
-| Middle / favorite | 1 |
+| Middle / favorite | 3 |
 | On                | 2 |
-| Raise             | 3 |
+| Raise             | 5 |
 | Off               | 4 |
-| Lower             | 5 |
+| Lower             | 6 |
 
 Always confirm with **Developer Tools → Events** (`lutron_caseta_button_event`) or blueprint **Debug — notify every Pico event**.
 
@@ -51,10 +57,10 @@ To reuse the **same** digits across **multiple** automations (or change them in 
 
 ## Troubleshooting
 
-- **Down does nothing but up works:** Re-import the latest blueprint. Older drafts compared button numbers loosely (`"5" == 5` can fail in templates). v0.1 on GitHub now compares with `(btn | int) == (button_down | int)`.
+- **Down does nothing but up works:** Re-import the latest blueprint. Older drafts compared button numbers loosely (`"5" == 5` can fail in templates). v0.1 on GitHub now compares with `(btn | int) == (btn_down_v | int)`.
 - **See exactly what the remote sends:** In the automation/blueprint, enable **Debug — notify every Pico event**, then press each button. Use the `button=` value in the notification for your mapping. Turn debug off after.
 - **Developer Tools:** Listen to event `lutron_caseta_button_event` and compare `press` vs `release` for the lower paddle.
 - **Lights keep dimming after you let go / ON flashes then dims again:** v0.1.2 uses **restart** mode so a new button press cancels an in-progress UP/DOWN repeat loop. Re-import the blueprint and recreate or re-save the automation. Earlier **parallel** mode could leave an old “hold dim” loop running while a new press started another run.
-- **Middle “does nothing”:** From v0.1.3+, **Middle behavior** defaults to **Favorite scene**. You must pick a **Favorite scene entity** (Scene helper) and at least one **`light.*`** under **Favorite snapshot — light entities** (areas/groups cannot be snapshotted). From v0.1.4, if something is missing, turn on **Notify if middle action is skipped** (default on) and you’ll get a persistent notification explaining which part is incomplete. Also enable **Debug — notify when middle short or long runs** to confirm short vs long timing. For custom behavior, set **Middle behavior** to **Custom**.
+- **Middle “does nothing”:** From v0.1.3+, **Middle button behavior** defaults to **Favorite scene**. You must pick a **Favorite scene entity** (Scene helper) and at least one **`light.*`** under **Favorite temporary snapshot — light entities** (areas/groups cannot be snapshotted). From v0.1.4, if something is missing, turn on **Notify if middle action is skipped** (default on) and you’ll get a persistent notification explaining which part is incomplete. Also enable **Debug — notify when middle short or long runs** to confirm short vs long timing. For custom behavior, set **Middle button behavior** to **Custom**.
 - **Favorite scene persistence:** Middle short press activates a temporary override if one exists, otherwise it activates the selected scene entity. Middle long press creates that temporary snapshot using the selected scene ID plus `_temp` and flashes the lights to confirm, so future short presses recall the saved favorite until Home Assistant restarts/reloads scenes. After a restart, the selected Scene helper/static scene is the fallback again.
 - **ON at 100%:** v0.1.2 turns lights on with `brightness_pct: 100` for the ON button path.
